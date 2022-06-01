@@ -3,7 +3,10 @@ project(filament-glfw-share-context C CXX)
 set(CMAKE_CXX_STANDARD 17)
 
 set(CMAKE_CXX_FLAGS ${CMAKE_CXX_FLAGS} -stdlib=libc++)
-set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+
+if (NOT APPLE)
+  set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fuse-ld=lld")
+endif()
 
 set(FILAMENT_INSTALL_PATH "" CACHE PATH "Path to a Filament installation directory")
 
@@ -29,9 +32,17 @@ add_custom_command(
   WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
 )
 
-add_executable(glfw-shared-gl-context
+set(_srcs 
   glfw-shared-gl-context.cpp
   ${PROJECT_BINARY_DIR}/bakedTexture.c
+)
+
+if (APPLE)
+  list(APPEND _srcs mac_helpers.mm)
+endif()
+
+add_executable(glfw-shared-gl-context
+  ${_srcs}
 )
 
 target_link_libraries(glfw-shared-gl-context 
@@ -58,16 +69,29 @@ target_link_libraries(glfw-shared-gl-context
 
   
   OpenGL::GL 
-  X11
-  dl
-  Xxf86vm
-  Xrandr
-  pthread
-  dl
-  Xi
-  Xinerama
-  Xcursor
   glfw
 )
+
+if (APPLE)
+  target_link_libraries(glfw-shared-gl-context
+    "-framework Cocoa"
+    "-framework CoreVideo"
+    "-framework Metal"
+    "-framework QuartzCore"
+    "-framework OpenGL"
+  )
+else()
+  target_link_libraries(glfw-shared-gl-context
+    X11
+    dl
+    Xxf86vm
+    Xrandr
+    pthread
+    dl
+    Xi
+    Xinerama
+    Xcursor
+  )
+endif()
 
 target_include_directories(glfw-shared-gl-context PUBLIC ${FILAMENT_INSTALL_PATH}/include)
