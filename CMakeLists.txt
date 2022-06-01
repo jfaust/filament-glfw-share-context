@@ -72,7 +72,15 @@ target_link_libraries(glfw-shared-gl-context
   glfw
 )
 
-if (LINUX)
+if (APPLE)
+  target_link_libraries(glfw-shared-gl-context
+    "-framework Cocoa"
+    "-framework CoreVideo"
+    "-framework Metal"
+    "-framework QuartzCore"
+    "-framework OpenGL"
+  )
+else()
   target_link_libraries(glfw-shared-gl-context
     X11
     dl
@@ -83,16 +91,6 @@ if (LINUX)
     Xi
     Xinerama
     Xcursor
-  )
-endif()
-
-if (APPLE)
-  target_link_libraries(glfw-shared-gl-context
-    "-framework Cocoa"
-    "-framework CoreVideo"
-    "-framework Metal"
-    "-framework QuartzCore"
-    "-framework OpenGL"
   )
 endif()
 
