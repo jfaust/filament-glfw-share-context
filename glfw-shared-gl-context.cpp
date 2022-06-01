@@ -1,20 +1,27 @@
-#define USE_GL_LINUX USE_GL
-#define GLFW_EXPOSE_NATIVE_X11
-#define GLFW_EXPOSE_NATIVE_GLX
-
 #include <unistd.h>
-#include <X11/X.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <sstream>
 
+#ifdef __linux__
+#include <X11/X.h>
 #undef Success
+#endif
 
 #define GLAD_GL_IMPLEMENTATION
 #include "gl.h"
 
 #include <GLFW/glfw3.h>
+#ifdef __linux__
+#define GLFW_EXPOSE_NATIVE_X11
+#define GLFW_EXPOSE_NATIVE_GLX
+#endif
+#ifdef __APPLE__
+#define GLFW_EXPOSE_NATIVE_COCOA
+#define GLFW_EXPOSE_NATIVE_NSGL
+#endif
 #include <GLFW/glfw3native.h>
+
 #include <filament/Engine.h>
 #include <filament/Renderer.h>
 #include <filament/SwapChain.h>
@@ -35,12 +42,17 @@
 #include <utils/Path.h>
 #include <utils/EntityManager.h>
 
+#ifdef __APPLE__
+#include "mac_helpers.h"
+#endif
+
 extern unsigned char bakedTexture_matc[];
 extern unsigned int bakedTexture_matc_len;
 
 using namespace filament;
 using namespace utils;
 
+#ifdef __linux__
 static int X11_GL_ErrorHandler(Display *d, XErrorEvent *e)
 {
   char *x11_error = NULL;
@@ -56,6 +68,7 @@ static int X11_GL_ErrorHandler(Display *d, XErrorEvent *e)
 
   return 0;
 }
+#endif
 
 int main(int argc, char *argv[])
 {
@@ -74,16 +87,16 @@ int main(int argc, char *argv[])
   glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
   glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
   glfwWindowHint(GLFW_ALPHA_BITS, badmatch ? 8 : 0);
-
   glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
+#ifdef __APPLE__
+  glfwWindowHint(GLFW_DEPTH_BITS, 24);
+  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, true);
+  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
+  glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, true);
+#endif
 
   glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
   GLFWwindow *invisible_window = glfwCreateWindow(1, 1, "Invisible (share context)", NULL, NULL);
-
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_VISIBLE, GL_TRUE);
-  GLFWwindow *win = glfwCreateWindow(400, 400, "Main", NULL, NULL);
-
   glfwMakeContextCurrent(invisible_window);
 
   int version = gladLoadGL(glfwGetProcAddress);
@@ -93,21 +106,40 @@ int main(int argc, char *argv[])
     return -1;
   }
 
+  glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
+  glfwWindowHint(GLFW_VISIBLE, GL_TRUE);
+  GLFWwindow *win = glfwCreateWindow(400, 400, "Main", NULL, NULL);
+
   void *share_context = nullptr;
   void *native_window = nullptr;
 
+#ifdef __linux__
   share_context = (void *)glfwGetGLXContext(invisible_window);
+#endif
+
+#ifdef __APPLE__
+  share_context = (void*)glfwGetNSGLContext(invisible_window);
+#endif
+
   glfwMakeContextCurrent(nullptr);
 
+#ifdef __linux__
   XSynchronize(glfwGetX11Display(), True);
   XSetErrorHandler(X11_GL_ErrorHandler);
+#endif
 
   Engine *engine = Engine::create(
       backend::Backend::OPENGL,
       nullptr,
       share_context);
 
+#ifdef __linux__
   native_window = (void *)glfwGetX11Window(win);
+#endif
+
+#ifdef __APPLE__
+  native_window = getContentView(win);
+#endif
 
   SwapChain *swap_chain = engine->createSwapChain(native_window);
   Renderer *renderer = engine->createRenderer();
