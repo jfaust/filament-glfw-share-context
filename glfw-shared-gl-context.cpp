@@ -89,6 +89,8 @@ int main(int argc, char *argv[])
   glfwWindowHint(GLFW_ALPHA_BITS, badmatch ? 8 : 0);
   glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
 #ifdef __APPLE__
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
+  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
   glfwWindowHint(GLFW_DEPTH_BITS, 24);
   glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, true);
   glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
