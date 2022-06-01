@@ -1,16 +1,3 @@
-#include <unistd.h>
-#include <stdlib.h>
-#include <stdio.h>
-#include <sstream>
-
-#ifdef __linux__
-#include <X11/X.h>
-#undef Success
-#endif
-
-#define GLAD_GL_IMPLEMENTATION
-#include "gl.h"
-
 #include <GLFW/glfw3.h>
 #ifdef __linux__
 #define GLFW_EXPOSE_NATIVE_X11
@@ -42,9 +29,8 @@
 #include <utils/Path.h>
 #include <utils/EntityManager.h>
 
-#ifdef __APPLE__
 #include "mac_helpers.h"
-#endif
+#include "metal_texture.h"
 
 extern unsigned char bakedTexture_matc[];
 extern unsigned int bakedTexture_matc_len;
@@ -52,29 +38,12 @@ extern unsigned int bakedTexture_matc_len;
 using namespace filament;
 using namespace utils;
 
-#ifdef __linux__
-static int X11_GL_ErrorHandler(Display *d, XErrorEvent *e)
-{
-  char *x11_error = NULL;
-  char x11_error_locale[256];
-
-  unsigned char errorCode = e->error_code;
-  if (XGetErrorText(d, errorCode, x11_error_locale, sizeof(x11_error_locale)) == 0)
-  {
-    printf("%s\n", x11_error_locale);
-  }
-
-  abort();
-
-  return 0;
-}
-#endif
-
 int main(int argc, char *argv[])
 {
   bool badmatch = false;
-  if (argc > 1 && std::string(argv[1]) == "--badmatch") {
-    badmatch = true; 
+  if (argc > 1 && std::string(argv[1]) == "--badmatch")
+  {
+    badmatch = true;
   }
 
   if (!glfwInit())
@@ -83,65 +52,13 @@ int main(int argc, char *argv[])
     return -1;
   }
 
-  glfwWindowHint(GLFW_SAMPLES, 1);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 4);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 1);
-  glfwWindowHint(GLFW_ALPHA_BITS, badmatch ? 8 : 0);
-  glfwWindowHint(GLFW_VISIBLE, GL_FALSE);
-#ifdef __APPLE__
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MAJOR, 3);
-  glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 2);
-  glfwWindowHint(GLFW_DEPTH_BITS, 24);
-  glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, true);
-  glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
-  glfwWindowHint(GLFW_COCOA_RETINA_FRAMEBUFFER, true);
-#endif
-
-  glfwWindowHint(GLFW_CLIENT_API, GLFW_OPENGL_API);
-  GLFWwindow *invisible_window = glfwCreateWindow(1, 1, "Invisible (share context)", NULL, NULL);
-  glfwMakeContextCurrent(invisible_window);
-
-  int version = gladLoadGL(glfwGetProcAddress);
-  if (version == 0)
-  {
-    printf("Failed to initialize OpenGL context\n");
-    return -1;
-  }
-
   glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
-  glfwWindowHint(GLFW_VISIBLE, GL_TRUE);
   GLFWwindow *win = glfwCreateWindow(400, 400, "Main", NULL, NULL);
 
-  void *share_context = nullptr;
-  void *native_window = nullptr;
-
-#ifdef __linux__
-  share_context = (void *)glfwGetGLXContext(invisible_window);
-#endif
-
-#ifdef __APPLE__
-  share_context = (void*)glfwGetNSGLContext(invisible_window);
-#endif
-
-  glfwMakeContextCurrent(nullptr);
-
-#ifdef __linux__
-  XSynchronize(glfwGetX11Display(), True);
-  XSetErrorHandler(X11_GL_ErrorHandler);
-#endif
-
   Engine *engine = Engine::create(
-      backend::Backend::OPENGL,
-      nullptr,
-      share_context);
+      backend::Backend::METAL);
 
-#ifdef __linux__
-  native_window = (void *)glfwGetX11Window(win);
-#endif
-
-#ifdef __APPLE__
-  native_window = getContentView(win);
-#endif
+  void *native_window = createMetalLayer(win);
 
   SwapChain *swap_chain = engine->createSwapChain(native_window);
   Renderer *renderer = engine->createRenderer();
@@ -155,11 +72,6 @@ int main(int argc, char *argv[])
 
   renderer->setClearOptions({.clearColor = {0.0f, 0.0f, 0.0f, 1.0f},
                              .clear = true});
-
-  glfwMakeContextCurrent(invisible_window);
-  GLuint tex_id;
-  glGenTextures(1, &tex_id);
-  glfwMakeContextCurrent(nullptr);
 
   struct Vertex
   {
@@ -184,12 +96,12 @@ int main(int argc, char *argv[])
   };
 
   Texture *texture = Texture::Builder()
-                         .import(tex_id)
-                         .sampler(Texture::Sampler::SAMPLER_2D)
-                         .width(2)
-                         .height(2)
-                         .levels(1)
-                         .build(*engine);
+                          .import((intptr_t) createTexture())
+                          .sampler(Texture::Sampler::SAMPLER_2D)
+                          .width(2)
+                          .height(2)
+                          .levels(1)
+                          .build(*engine);
 
   TextureSampler sampler(TextureSampler::MinFilter::LINEAR, TextureSampler::MagFilter::LINEAR);
   auto vb = VertexBuffer::Builder()
@@ -207,8 +119,8 @@ int main(int argc, char *argv[])
   ib->setBuffer(*engine,
                 IndexBuffer::BufferDescriptor(QUAD_INDICES, 12, nullptr));
   auto mat = Material::Builder()
-                 .package(bakedTexture_matc, bakedTexture_matc_len)
-                 .build(*engine);
+                  .package(bakedTexture_matc, bakedTexture_matc_len)
+                  .build(*engine);
   auto mat_inst = mat->createInstance();
   mat_inst->setParameter("albedo", texture, sampler);
   auto renderable = EntityManager::get().create();
@@ -225,20 +137,7 @@ int main(int argc, char *argv[])
   uint32_t i = 0;
   while (!glfwWindowShouldClose(win))
   {
-    ++i;
-    glfwMakeContextCurrent(invisible_window);
-    uint32_t data[4] = {
-        i,
-        i,
-        i,
-        i,
-    };
-
-    glBindTexture(GL_TEXTURE_2D, tex_id);
-    glTexStorage2D(GL_TEXTURE_2D, 1, GL_RGBA8, 2, 2);
-    glTexSubImage2D(GL_TEXTURE_2D, 0, 0, 0, 2, 2, GL_RGBA, GL_UNSIGNED_BYTE, data);
-    glfwMakeContextCurrent(nullptr);
-
+    updateTexture();
     int w, h;
     glfwGetWindowSize(win, &w, &h);
 

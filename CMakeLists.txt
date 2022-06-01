@@ -22,7 +22,7 @@ find_package(OpenGL REQUIRED)
 add_custom_command(
   OUTPUT 
       "${PROJECT_BINARY_DIR}/bakedTexture.c"
-  COMMAND ${FILAMENT_INSTALL_PATH}/bin/matc -o ${PROJECT_BINARY_DIR}/bakedTexture.matc ${CMAKE_CURRENT_SOURCE_DIR}/bakedTexture.mat
+  COMMAND ${FILAMENT_INSTALL_PATH}/bin/matc -a opengl -a metal -o ${PROJECT_BINARY_DIR}/bakedTexture.matc ${CMAKE_CURRENT_SOURCE_DIR}/bakedTexture.mat
   COMMAND xxd -i "bakedTexture.matc" > bakedTexture.c
   COMMENT "Creating ${PROJECT_BINARY_DIR}/bakedTexture.c"
   DEPENDS 
@@ -32,20 +32,18 @@ add_custom_command(
   WORKING_DIRECTORY ${PROJECT_BINARY_DIR}
 )
 
-set(_srcs 
+include_directories(${FILAMENT_INSTALL_PATH}/include)
+
+set(_gl_srcs 
   glfw-shared-gl-context.cpp
   ${PROJECT_BINARY_DIR}/bakedTexture.c
 )
 
 if (APPLE)
-  list(APPEND _srcs mac_helpers.mm)
+  list(APPEND _gl_srcs mac_helpers.mm)
 endif()
 
-add_executable(glfw-shared-gl-context
-  ${_srcs}
-)
-
-target_link_libraries(glfw-shared-gl-context 
+set(_filament_libs
   ${FILAMENT_INSTALL_PATH}/lib/x86_64/libbackend.a
   ${FILAMENT_INSTALL_PATH}/lib/x86_64/libbluegl.a
   ${FILAMENT_INSTALL_PATH}/lib/x86_64/libbluevk.a
@@ -66,7 +64,13 @@ target_link_libraries(glfw-shared-gl-context
   ${FILAMENT_INSTALL_PATH}/lib/x86_64/libsmol-v.a
   ${FILAMENT_INSTALL_PATH}/lib/x86_64/libutils.a
   ${FILAMENT_INSTALL_PATH}/lib/x86_64/libvkshaders.a
+)
 
+add_executable(glfw-shared-gl-context
+  ${_gl_srcs}
+)
+target_link_libraries(glfw-shared-gl-context 
+  ${_filament_libs}
   
   OpenGL::GL 
   glfw
@@ -94,4 +98,24 @@ else()
   )
 endif()
 
-target_include_directories(glfw-shared-gl-context PUBLIC ${FILAMENT_INSTALL_PATH}/include)
+if (APPLE)
+  add_executable(glfw-shared-metal
+    glfw-shared-metal.cpp
+    mac_helpers.mm
+    metal_texture.cpp
+    ${PROJECT_BINARY_DIR}/bakedTexture.c
+  )
+
+  target_link_libraries(glfw-shared-metal
+    ${_filament_libs}
+  
+    glfw
+    "-framework Cocoa"
+    "-framework CoreVideo"
+    "-framework Metal"
+    "-framework QuartzCore"
+  )
+
+  target_include_directories(glfw-shared-metal PRIVATE metal-cpp)
+
+endif()

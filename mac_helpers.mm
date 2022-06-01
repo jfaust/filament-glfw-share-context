@@ -12,3 +12,10 @@ void* getContentView(GLFWwindow* win) {
   NSView* content_view = window.contentView;
   return content_view;
 }
+
+void* createMetalLayer(GLFWwindow* win) {
+  NSWindow* window = (NSWindow*)glfwGetCocoaWindow(win);
+  NSView* content_view = window.contentView;
+  [content_view setLayer: [CAMetalLayer layer]];
+  return content_view.layer;
+}
